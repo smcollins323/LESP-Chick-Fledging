@@ -1,0 +1,333 @@
+---
+title: "LESP Chick Fledging"
+author: "Sydney Collins"
+date: "2023-06-10"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r Load Packages}
+rm(list=ls())
+
+#Libraries
+library(tidyverse)
+library(patchwork)
+library(lubridate)
+library(data.table)
+library(doBy)
+
+#Data frames
+load("data/chick.Rda")
+load("data/moon.Rda")
+load("data/cloud.Rda")
+```
+
+```{r Summary Stats}
+#Histograms of date and time
+suntimehist <- ggplot(chick, aes(x = TimeAfterSunset))+
+  xlab("Hours After Sunset")+
+  ylab("Number of Fledglings")+
+  geom_histogram(colour = "black", fill = "lightgrey", binwidth = 1) +
+  geom_vline(xintercept = median(chick$TimeAfterSunset), linewidth = 1.5, color = "black", linetype = "dashed")+
+  theme(panel.background = element_rect(fill = 'white', colour = 'black'), legend.position = "none")
+suntimehist
+
+timehist <- ggplot(chick, aes(x = ITime))+
+  xlab("Minutes after 18:00")+
+  ylab("Number of Fledglings")+
+  geom_histogram(colour = "black", fill = "lightgrey", binwidth = 30)+
+  geom_vline(xintercept = median(chick$ITime), linewidth = 1.5,colour = "black", linetype = "dashed")+
+  theme(panel.background = element_rect(fill = 'white', colour = 'black'), legend.position = "none")
+timehist
+
+datehist <- ggplot(chick, aes(x = yDate))+
+  xlab("Day of Year")+
+  ylab("Number of Fledglings")+
+  geom_histogram(colour = "black", fill = "lightgrey", binwidth = 5)+
+  geom_vline(xintercept = median(chick$yDate), linewidth = 1.5, color = "black", linetype = "dashed")+
+  theme(panel.background = element_rect(fill = 'white', colour = 'black'), legend.position = "none")
+datehist
+
+#Summary stats for date and time per year
+results <- summaryBy(ITime + yDate + TimeAfterSunset ~ Year, FUN = c(length, mean, sd, median, IQR, min, max), data = chick)
+results$Date.mean <- as.Date(results$yDate.mean, origin = "2021-01-01")
+results$Date.median <- as.Date(results$yDate.median, origin = "2021-01-01")
+results$Date.min <- as.Date(results$yDate.min, origin = "2021-01-01")
+results$Date.max <- as.Date(results$yDate.max, origin = "2021-01-01")
+
+#Summary stats for whole sample (use medians and IQR because the data are highly right-skewed)
+median(chick$ITime)
+IQR(chick$ITime)
+
+median(chick$TimeAfterSunset)
+IQR(chick$TimeAfterSunset)
+
+as.Date(median(chick$yDate), origin = "2017-01-01")
+IQR(chick$yDate)
+
+###Figure 1####
+jpeg(filename = "figures/Figure1_histograms.jpeg", units = "cm", res = 300, width = 15, height = 18)
+suntimehist / datehist + plot_annotation(tag_levels = list(c("A", "B")))
+dev.off()
+
+#Figure S5####
+jpeg(filename = "figures/FigureS5_time_hist.jpeg", units = "cm", res = 300, width = 15, height = 10)
+timehist
+dev.off()
+```
+
+```{r Annual Differences}
+#Time - highly right skewed so use the non-parametric test
+boxplot(TimeAfterSunset ~ Year, data = chick)
+kruskal.test(TimeAfterSunset ~ Year, data = chick)
+
+#Date - looks normal so use ANOVA
+boxplot(yDate ~ Year, data = chick)
+date_mod <- aov(yDate ~ Year, data = chick)
+summary(date_mod)
+TukeyHSD(date_mod)
+```
+
+```{r Moon Phase Chi-squared}
+#Look at the distribution of chicks that fledged among the phases
+fledge_prop <- summary(chick$Phase)
+
+#the moon phases do not occur equally and the months are an arbitrary human invention - crop the moon dataset to the range of fledge dates for LESP
+moon$yDate <- yday(moon$Date)
+moon_lesp_range <- moon %>% filter(yDate < 318) %>%
+  filter(yDate > 255)
+
+#Chi-squared test
+summary(as.factor(moon_lesp_range$Phase))
+chisq.test(fledge_prop, p = c(113/372, 135/372, 61/372, 63/372))
+
+#Post-hoc tests
+prop.test(x = 34, n = 120, p = 113/372, alternative="two.sided") #First quarter
+prop.test(x = 10, n = 120, p = 61/372, alternative="two.sided")  #Second quarter
+prop.test(x = 32, n = 120, p = 63/372, alternative="two.sided")  #Third quarter
+prop.test(x = 44, n = 120, p = 135/372, alternative="two.sided") #Fourth quarter
+```
+
+```{r Cloud Cover & Moon Phase Chi-squared}
+#Create a variable describing weather
+chick <- chick %>% mutate(CloudCat = ifelse(CloudCover < 50, "low", "high")) %>%
+  mutate(LightEnv = ifelse(Phase == "first quarter" & CloudCat == "low", "low1", ifelse(Phase == "first quarter" & CloudCat == "high", "high1", ifelse(Phase == "second quarter" & CloudCat == "low", "low2", ifelse(Phase == "second quarter" & CloudCat == "high", "high2", ifelse(Phase == "third quarter" & CloudCat == "low", "low3", ifelse(Phase == "third quarter" & CloudCat == "high", "high3", ifelse(Phase == "fourth quarter" & CloudCat == "low", "low4", "high4")))))) ))
+
+#Crop the data to just the date range
+cloud_lesp_range <- left_join(cloud, moon, by = "Date") %>%
+  drop_na(Moon_Illumination) %>%
+  mutate(CloudCat = ifelse(CloudCover < 50, "low", "high")) %>%
+  mutate(LightEnv = ifelse(Phase == "first quarter" & CloudCat == "low", "low1", ifelse(Phase == "first quarter" & CloudCat == "high", "high1", ifelse(Phase == "second quarter" & CloudCat == "low", "low2", ifelse(Phase == "second quarter" & CloudCat == "high", "high2", ifelse(Phase == "third quarter" & CloudCat == "low", "low3", ifelse(Phase == "third quarter" & CloudCat == "high", "high3", ifelse(Phase == "fourth quarter" & CloudCat == "low", "low4", "high4")))))))) %>%
+  filter(yDate < 318) %>%
+  filter(yDate > 255)
+
+#Chi-squared test
+fledge_prop2 <- summary(as.factor(chick$LightEnv))
+summary(as.factor(cloud_lesp_range$LightEnv))
+chisq.test(fledge_prop2, p = c(73/372, 37/372, 42/372, 83/372, 40/372, 24/372, 21/372, 52/372))
+
+#Post-hoc tests
+prop.test(x = 19, n = 120, p = 73/372, alternative="two.sided") #high1
+prop.test(x = 7, n = 120, p = 37/372, alternative="two.sided") #high2
+prop.test(x = 20, n = 120, p = 42/372, alternative="two.sided") #high3
+prop.test(x = 26, n = 120, p = 83/372, alternative="two.sided") #high4
+prop.test(x = 15, n = 120, p = 40/372, alternative="two.sided") #low1
+prop.test(x =3, n = 120, p = 24/372, alternative="two.sided") #low2
+prop.test(x = 12, n = 120, p = 21/372, alternative="two.sided") #low3
+prop.test(x = 18, n = 120, p = 52/372, alternative="two.sided") #low4
+
+#Bar graph of moon x cloud cover
+bartable <- as.data.frame(fledge_prop2)
+names(bartable) <- c("value")
+bartable$condition <- rownames(bartable)
+bartable$type <- "Observed"
+b <- as.data.frame(summary(as.factor(cloud_lesp_range$LightEnv))/372)*122
+names(b) <- c("value")
+b$condition <- rownames(b)
+b$type <- "Expected"
+bartable <- rbind(bartable, b)
+
+####Figure S3####
+jpeg(filename = "figures/FigureS3_CloudMoonChi.jpeg", units = "cm", res = 300, width = 15, height = 13)
+ggplot(bartable) +
+  geom_bar(aes(x = condition, y = value, fill = type), position = position_dodge(preserve = 'single'), stat = "identity", width = 0.6) +
+  scale_x_discrete(labels = c("First Quarter High Cover", "Second Quarter High Cover", "Third Quarter High Cover", "Fourth Quarter High Cover", "First Quarter Low Cover", "Second Quarter Low Cover", "Third Quarter Low Cover", "Fourth Quarter Low Cover")) +
+  xlab("Environmental Conditions") +
+  ylab("Number of Fledglings") +
+  labs(fill = "Legend") +
+  scale_fill_manual(values = c("black", "grey")) +
+  theme(panel.background = element_rect(fill = 'white', colour = 'black'), axis.text.x = element_text(angle = 60, hjust = 1))
+dev.off()
+```
+
+```{r Cloud Cover Chi-squared}
+#Categorize cloud cover
+chick <- chick %>%
+  mutate(CloudCover = as.numeric(CloudCover)) %>%
+  mutate(Cloud_binned = ifelse(CloudCover < 25, "first", ifelse(CloudCover < 50, "second", ifelse(CloudCover > 74, "fourth", "third"))))
+
+#Calculate observed number of fledglings in each category
+summary(as.factor(chick$Cloud_binned))
+fledge_prop3 <- summary(as.factor(chick$Cloud_binned))
+
+#Calculate expected proportion of fledglings in each category
+cloud_lesp_range <- cloud_lesp_range %>% 
+  mutate(CloudCover = as.numeric(CloudCover)) %>%
+  mutate(new_bin = cut(CloudCover, breaks = 4, right = F))
+summary(as.factor(cloud_lesp_range$new_bin))
+
+#Chi-squared test
+chisq.test(fledge_prop3, p = c(46/372, 163/372, 61/372, 102/372))
+
+####FigureS4####
+cloud_plot <- as.data.frame(table(cloud_lesp_range$CloudCover)) %>%
+  left_join(as.data.frame(table(chick$CloudCover)), by = "Var1") %>%
+  rename(CloudCover = Var1, Expected = Freq.x, Observed = Freq.y) %>%
+  replace(is.na(.), 0) %>%
+  mutate(CloudCover = as.numeric(CloudCover), Expected = as.numeric(Expected))
+
+jpeg(filename = "figures/FigureS4_CloudChi.jpeg", units = "cm", res = 300, width = 15, height = 10)
+ggplot(data = cloud_plot) +
+  ylab("Percent of Birds") +
+  xlab("Cloud Cover (%)") +
+  geom_smooth(aes(x = CloudCover, y = (Expected/sum(Expected))*100), method = NULL, colour = "red", linetype = "dashed", linewidth = 1, se = F) +
+  geom_smooth(aes(x = CloudCover, y = (Observed/sum(Observed))*100), method = NULL, colour = "black", linetype = "solid", se = F) +
+  theme_classic()
+dev.off()
+```
+
+```{r Fledging, Moon, and Strandings}
+#Create and clean up the strandings dataset
+#Want to get rid of days that had the lights on because this inflates the number of stranded birds
+strand <- read.csv("data/Fishplant_2022_Feb_27_2023_SG.csv") %>%
+  mutate(Date = as.POSIXlt(Date, format = "%m-%d-%Y")) %>%
+  mutate(Year = Date$year + 1900) %>%
+  filter(Year > 2018) %>%
+  filter(Database %like% "Sherry's Data") %>%
+  mutate(Stranded = as.numeric(Total_LESP)) %>%
+  mutate(Lunar = as.integer(round(Lunar))) %>%
+  dplyr::select(-(Plant_Lights_on.off:Number.of.Boxes)) %>%
+  dplyr::select(-(Total_LESP:Database)) %>%
+  drop_na() %>%
+  filter(Stranded < 100)
+  
+boxplot(strand$Stranded)
+
+moon_lesp_range <- moon_lesp_range %>% mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+
+moon_new <- as.data.frame(table(moon_lesp_range$new_bin))
+
+chick_strand <- as.data.frame(table(as.integer(round(chick$Moon_Illumination)))) %>%
+  rename(Fledged = Freq, Lunar = Var1) %>%
+  mutate(Lunar = as.integer(as.character(Lunar))) %>%
+  full_join(summaryBy(Stranded ~ Lunar, data = na.omit(strand), FUN = sum)) %>%
+  mutate(Fledged = coalesce(Fledged, 0)) %>%
+  mutate(Stranded.sum = coalesce(Stranded.sum, 0)) %>%
+  add_row(Lunar = 22, Fledged = 0, Stranded.sum = 0) %>%
+  add_row(Lunar = 60, Fledged = 0, Stranded.sum = 0) %>%
+  arrange(Lunar) %>%
+  mutate(Moon = moon_new$Freq)
+
+plot(chick_strand$Stranded ~ chick_strand$Lunar, pch = 16)
+plot(chick_strand$Fledged ~ chick_strand$Lunar, pch = 16)
+
+jpeg(filename = "figures/Figure2_StrandFledge.jpeg", units = "cm", res = 300, width = 15, height = 10)
+ggplot(data = chick_strand) +
+  scale_y_continuous("Percent of Birds") +
+  coord_cartesian(xlim = c(0, 100), ylim = c(0, 3), expand = TRUE) +
+  xlim(0, 100) +
+  xlab("Percent of Moon Visible") +
+  geom_smooth(aes(x = Lunar, y = (Moon/sum(Moon))*100), method = NULL, colour = "grey", linetype = "solid", linewidth = 1, se = F) +
+  geom_smooth(aes(x = Lunar, y = (Fledged/sum(Fledged))*100), method = NULL, colour = "black", linetype = "solid", se = F) +
+  geom_smooth(aes(x = Lunar, y = (Stranded.sum/sum(Stranded.sum))*100), method = NULL, colour = "red", linetype = "dashed", se = F) +
+  theme_classic()
+dev.off()
+```
+
+```{r Lunar by Year}
+#Binned figures by year
+moon_binned17 <- moon_lesp_range %>%
+  filter(Date < "2018-01-01") %>%
+  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+moon_binned17 <- as.data.frame(summary(moon_binned17$new_bin))
+fledge_binned17 <- chick %>%
+  filter(Date < "2018-01-01") %>%
+  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+fledge_binned17 <- as.data.frame(summary(fledge_binned17$new_bin))
+newdf17 <- as.data.frame(cbind((seq(1:100)-1), moon_binned17/62, fledge_binned17/30))
+names(newdf17) <- c("Phase", "Moon", "Chick")
+
+p17 <- ggplot(data = newdf17)+
+  xlab("Moon Illumination (%)")+
+  ylab("Proportion")+
+  ggtitle("2017")+
+  geom_smooth(aes(x = Phase, y = Chick), linewidth = 1, colour = "black", se = F) +
+  geom_smooth(aes(x = Phase, y = Moon), linetype = "dashed", linewidth = 1, colour = "red", se = F) +
+  theme(panel.background = element_rect(fill = 'white', colour = 'black'), legend.position = "none")
+
+moon_binned18 <- moon_lesp_range %>%
+  filter(Date < "2019-01-01") %>%
+  filter(Date > "2018-01-01") %>%
+  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+moon_binned18 <- as.data.frame(summary(moon_binned18$new_bin))
+fledge_binned18 <- chick %>%
+  filter(Date < "2019-01-01") %>%
+  filter(Date > "2018-01-01") %>%
+  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+fledge_binned18 <- as.data.frame(summary(fledge_binned18$new_bin))
+newdf18 <- as.data.frame(cbind((seq(1:100)-1), moon_binned18/62, fledge_binned18/41))
+names(newdf18) <- c("Phase", "Moon", "Chick")
+
+p18 <- ggplot(data = newdf18)+
+  xlab("Moon Illumination (%)")+
+  ylab("Proportion")+
+  ggtitle("2018")+
+  geom_smooth(aes(x = Phase, y = Chick), linewidth = 1, colour = "black", se = F) +
+  geom_smooth(aes(x = Phase, y = Moon), linetype = "dashed", linewidth = 1, colour = "red", se = F) +
+  theme(panel.background = element_rect(fill = 'white', colour = 'black'), legend.position = "none")
+
+moon_binned21 <- moon_lesp_range %>%
+  filter(Date < "2022-01-01") %>%
+  filter(Date > "2021-01-01") %>%
+  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+moon_binned21 <- as.data.frame(summary(moon_binned21$new_bin))
+fledge_binned21 <- chick %>%
+  filter(Date < "2022-01-01") %>%
+  filter(Date > "2021-01-01") %>%
+  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+fledge_binned21 <- as.data.frame(summary(fledge_binned21$new_bin))
+newdf21 <- as.data.frame(cbind((seq(1:100)-1), moon_binned21/62, fledge_binned21/9))
+names(newdf21) <- c("Phase", "Moon", "Chick")
+
+p21 <- ggplot(data = newdf21)+
+  xlab("Moon Illumination (%)")+
+  ylab("Proportion")+
+  ggtitle("2021")+
+  geom_smooth(aes(x = Phase, y = Chick), linewidth = 1, colour = "black", se = F) +
+  geom_smooth(aes(x = Phase, y = Moon), linetype = "dashed", linewidth = 1, colour = "red", se = F) +
+  theme(panel.background = element_rect(fill = 'white', colour = 'black'), legend.position = "none")
+
+moon_binned22 <- moon_lesp_range %>%
+  filter(Date > "2022-01-01") %>%
+  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+moon_binned22 <- as.data.frame(summary(moon_binned22$new_bin))
+fledge_binned22 <- chick %>%
+  filter(Date > "2022-01-01") %>%
+  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+fledge_binned22 <- as.data.frame(summary(fledge_binned22$new_bin))
+newdf22 <- as.data.frame(cbind((seq(1:100)-1), moon_binned22/62, fledge_binned22/40))
+names(newdf22) <- c("Phase", "Moon", "Chick")
+
+p22 <- ggplot(data = newdf22)+
+  xlab("Moon Illumination (%)")+
+  ylab("Proportion")+
+  ggtitle("2022")+
+  geom_smooth(aes(x = Phase, y = Chick), linewidth = 1, colour = "black", se = F) +
+  geom_smooth(aes(x = Phase, y = Moon), linetype = "dashed", linewidth = 1, colour = "red", se = F) +
+  theme(panel.background = element_rect(fill = 'white', colour = 'black'), legend.position = "none")
+
+jpeg(filename = "figures/FigureS6_LunarbyYear.jpeg", units = "cm", res = 300, width = 15, height = 12)
+p17 + p18 + p21 + p22
+dev.off()
+```

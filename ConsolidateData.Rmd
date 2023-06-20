@@ -1,0 +1,133 @@
+---
+title: "Consolidate Data"
+author: "Sydney Collins"
+date: "2023-06-10"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#Load Packages
+```{r Libraries}
+rm(list=ls())
+
+library(ncdf4)
+library(tidyverse)
+library(lubridate)
+library(data.table)
+library(chillR)
+```
+
+#Cloud Cover Dataset
+```{r Cloud Cover Dataset}
+#Formatting the cloud cover data
+#Data from https://cds.climate.copernicus.eu/cdsapp#!/dataset/satellite-cloud-properties?tab=form
+
+file_thesis <- list.files("data/CloudCover", pattern = "*.nc", all.files = TRUE, full.names = TRUE)
+cloud <- data.frame()
+
+for(i in 1:length(file_thesis)){
+  cdf <- nc_open(file_thesis[i])
+  a <- as.data.frame(ncvar_get(cdf, varid="cfc"))
+  x <- a[29,25]
+  y <- file_thesis[i]
+  z <- cbind(x, y)
+  cloud <- rbind(cloud, z)
+}
+
+cloud$y <- gsub("000040019AVPOS01GL_area_subset.nc", "", cloud$y)
+cloud$y <- gsub("data/CloudCover/5be64465-46fb-41dd-9a7d-4dc86e088f3c-CFCdm", "", cloud$y)
+cloud$y <- gsub("000000219AVPOSE1GL_area_subset.nc", "", cloud$y)
+cloud$y <- gsub("data/CloudCover/2929ea4c-02bc-4441-9ce6-dc3805119109-CFCdm", "", cloud$y)
+cloud$y <- gsub("data/CloudCover/CFCdm", "", cloud$y)
+cloud$y <- gsub("000040019AVPOS01GL.nc", "", cloud$y)
+
+names(cloud) <- c("CloudCover", "Date")
+cloud$Date <- gsub("^(.{4})(.*)$", "\\1-\\2", cloud$Date)
+cloud$Date <- gsub("^(.{7})(.*)$", "\\1-\\2", cloud$Date)
+cloud$Date <- as.Date(cloud$Date)
+
+save(cloud, file = "data/cloud.Rda")
+```
+
+#Chick Fledging Dataset
+```{r Chick Fledge Age}
+#Load data
+fledgeDate <- read.csv("data/fledge_dates.csv") %>%
+  filter(BandNo != "") %>%
+  select(Year, Plot, BurrowID, BandNo, DateTime)
+wl <- read.csv("data/chick_banding.csv") %>%
+  filter(Tag.deployed != "") %>%
+  select(Year, Date, Plot, BurrowID, BandNo, BirdWt, Wing, Tarsus) %>%
+  left_join(fledgeDate, by = c("Year", "BurrowID", "Plot", "BandNo")) %>%
+  mutate(Date = as.Date(Date), Fledge = as.Date(DateTime)) %>%
+  mutate(DaysSinceBanding = as.numeric(Fledge - Date)) %>%
+  mutate(AgeatFledge = 0.297*Wing + 13.521 + DaysSinceBanding) %>%
+  mutate(FledgeWLmin = Wing + (DaysSinceBanding*(2.24-0.08)), FledgeWLmax = Wing +(DaysSinceBanding*(2.24+0.08)))
+
+boxplot(wl$AgeatFledge)
+
+#Eliminate birds that are not big enough to fledge
+nofledge <- wl %>% filter(AgeatFledge < 56)
+nofledge <- as.character(nofledge$BandNo)
+save(nofledge, file = "data/nofledge.Rda")
+```
+
+```{r Chick Fledging Dataset}
+##Format the data##
+chick <- read.csv("data/fledge_dates.csv") %>%
+  drop_na(Count)
+chick$DateTime <- as.POSIXct(chick$DateTime, format = "%Y-%m-%d %H:%M")
+chick$yDate <- yday(as.POSIXct(chick$DateTime))
+chick$Time <- as.ITime(chick$DateTime)
+chick$ITime <- as.numeric(chick$Time)
+chick$Date <- as.Date(chick$DateTime)
+chick <- chick %>% filter(!(BandNo %in% nofledge ))
+
+#scale the time to 6pm
+chick_2 <- chick %>% filter(ITime < 60000)
+chick <- chick %>% filter(ITime > 60000)
+chick_2$ITime <- chick_2$ITime + 86400
+chick <- rbind(chick, chick_2)
+chick$ITime <- (chick$ITime - 64800)/60
+chick$Year <- as.factor(chick$Year)
+chick$Plot <- as.factor(chick$Plot)
+
+#Add the moon phase data
+moon <- read.csv("data/Moon_Phase_17_22.csv")
+moon$ID <- rownames(moon)
+
+#Make a categorical version of the moon phase data
+ID <- moon$ID
+for(i in 1:length(ID)){
+  moon$Phase[[i]] <- if(is.na(moon$Moon_Illumination[[i]])){
+    print("does not pass meridian") }
+  else if(moon$Moon_Illumination[[i]] < 25){
+    print("first quarter") }
+  else if(moon$Moon_Illumination[[i]] < 50){
+    print("second quarter") } 
+  else if(moon$Moon_Illumination[[i]] < 75){
+    print("third quarter") }
+  else if(moon$Moon_Illumination[[i]] > 74){
+    print("fourth quarter") }
+  else {
+    print("error")}}
+moon$Phase <- unlist(moon$Phase)
+moon$Date <- as.Date(moon$Date)
+
+#Attach the moon phase data to the chick dataset
+chick <- left_join(chick, moon, by = "Date")
+chick$Phase <- as.factor(chick$Phase)
+
+#Add the cloud cover data
+chick <- left_join(chick, cloud, by = "Date")
+
+#Add the sunset data
+sunset <- as.data.frame(daylength(47.26265, chick$yDate, notimes.as.na = FALSE))
+chick$Sunset <- as.integer(sunset$Sunset*60 - (18*60))
+chick$TimeAfterSunset <- (chick$ITime - chick$Sunset)/60
+
+#Save the dataframes
+save(moon, file = "data/moon.Rda")
+save(chick, file = "data/chick.Rda")
+```

@@ -1,0 +1,71 @@
+---
+title: "Plots Map"
+author: "Sydney Collins"
+date: "2023-06-10"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r Libraries}
+rm(list=ls())
+
+library(rgdal)
+library(legendMap)
+require(gridExtra)
+require(ggplot2)
+require(raster)
+library(maps)
+library(ggforce)
+require(grid)
+library(tidyverse)
+library(patchwork)
+```
+
+```{r Map}
+#load and format data
+world <- map_data("world")
+Gull <- read.csv("data/Gull_Island_Polygon.csv")
+Forest <- read.csv("data/Gull_Island_Forest_Polygon.csv")
+
+plot1 <- as.data.frame(cbind(47.2586, -52.7759))
+plot2 <- as.data.frame(cbind(47.2593, -52.7765))
+plot3 <- as.data.frame(cbind(47.26, -52.777))
+plot4 <- as.data.frame(cbind(47.2606, -52.777))
+plot5 <- as.data.frame(cbind(47.2606, -52.776))
+plot6 <- as.data.frame(cbind(47.2604, -52.7751))
+
+#Create the map
+p1 <- ggplot() +
+  xlab("") + 
+  ylab("") +
+  coord_map()+
+  geom_polygon(data = Gull, aes(x = long, y = lat), colour = "black", fill = "lightgrey", linewidth = 0.05) +
+  geom_polygon(data = Forest, aes(x = long, y = lat), colour = "darkgrey", fill = "darkgrey")+
+  geom_point(data = plot1, aes(y = V1, x = V2), size = 3, pch = "1")+
+  geom_point(data = plot2, aes(y = V1, x = V2), size = 3, pch = "2")+
+  geom_point(data = plot3, aes(y = V1, x = V2), size = 3, pch = "3")+
+  geom_point(data = plot4, aes(y = V1, x = V2), size = 3, pch = "4")+
+  geom_point(data = plot5, aes(y = V1, x = V2), size = 3, pch = "5")+
+  geom_point(data = plot6, aes(y = V1, x = V2), size = 3, pch = "6")+
+  theme(panel.background = element_rect(fill = 'white', colour = 'black'), axis.text = element_text(colour = "black", size = 6))+
+  scale_bar(lon = -52.7745, lat = 47.2545, distance_lon = 0.2, distance_lat = 0.1, distance_legend = 0.15, dist_unit = "km", orientation = F, legend_size = 3)
+
+#Add an inset map
+p2 <- ggplot() +
+  xlab("") + 
+  ylab("") +
+  coord_quickmap(xlim = c(-100, -50), ylim = c(43, 75)) +
+  geom_polygon(data = world, aes(x = long, y = lat, group = group), color = "black", fill = "lightgrey", linewidth = 0.1) +
+  geom_point(aes(y = 47.26265, x = -52.77187), colour = "red", cex = 3) +
+  theme(panel.background = element_rect(fill = 'white', colour = 'black'), axis.text = element_text(colour = "black", size = 6))
+
+#Save the figure
+p2 + p1
+
+####Figure 1####
+jpeg(filename = "figures/FigureS1_map.jpeg", units = "mm", width = 180, height = 130, res = 300)
+p2 + p1 + plot_annotation(tag_levels = 'A')
+dev.off()
+
+```
