@@ -19,12 +19,14 @@ library(data.table)
 library(doBy)
 library(moonlit)
 library(sjmisc)
+library(tibble)
 
 #Data frames
 load("data/chick.Rda")
 load("data/moon.Rda")
 load("data/cloud.Rda")
 load("data/moondates.Rda")
+load("data/strand.Rda")
 ```
 
 ```{r Summary Stats}
@@ -98,12 +100,12 @@ start_date17 <- as.POSIXct("2017-09-13")
 dates17 <- as.data.frame(seq(start_date17, by = "day", length.out = 70)) %>%
   rename(DateTime = `seq(start_date17, by = "day", length.out = 70)`)
 dates17 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates17$DateTime, e = 0.26)
-peak17 <- ggplot(data = dates17, aes(x = date, y = moonPhase)) +
+peak17 <- ggplot(data = dates17, aes(x = date, y = moonPhase*100)) +
   geom_point() +
   geom_vline(aes(xintercept = as.POSIXct("2017-10-11 00:00:00"))) +
   geom_vline(aes(xintercept = as.POSIXct("2017-10-10 00:00:00")), colour = "red") +
   xlab("Date") +
-  ylab("Moon Phase (proportion)") +
+  ylab("Moon Phase") +
   ggtitle("2017") +
   theme_classic()
 
@@ -111,12 +113,12 @@ start_date18 <- as.POSIXct("2018-09-13")
 dates18 <- as.data.frame(seq(start_date18, by = "day", length.out = 70)) %>%
   rename(DateTime = `seq(start_date18, by = "day", length.out = 70)`)
 dates18 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates18$DateTime, e = 0.26)
-peak18 <- ggplot(data = dates18, aes(x = date, y = moonPhase)) +
+peak18 <- ggplot(data = dates18, aes(x = date, y = moonPhase*100)) +
   geom_point() +
   geom_vline(aes(xintercept = as.POSIXct("2018-10-8 00:00:00"))) +
   geom_vline(aes(xintercept = as.POSIXct("2018-10-10 00:00:00")), colour = "red") +
   xlab("Date") +
-  ylab("Moon Phase (proportion)") +
+  ylab("Moon Phase") +
   ggtitle("2018") +
   theme_classic()
 
@@ -124,12 +126,12 @@ start_date21 <- as.POSIXct("2021-09-13")
 dates21 <- as.data.frame(seq(start_date21, by = "day", length.out = 70)) %>%
   rename(DateTime = `seq(start_date21, by = "day", length.out = 70)`)
 dates21 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates21$DateTime, e = 0.26)
-peak21 <- ggplot(data = dates21, aes(x = date, y = moonPhase)) +
+peak21 <- ggplot(data = dates21, aes(x = date, y = moonPhase*100)) +
   geom_point() +
   geom_vline(aes(xintercept = as.POSIXct("2021-09-29 00:00:00"))) +
   geom_vline(aes(xintercept = as.POSIXct("2021-10-10 00:00:00")), colour = "red") +
   xlab("Date") +
-  ylab("Moon Phase (proportion)") +
+  ylab("Moon Phase") +
   ggtitle("2021") +
   theme_classic()
 
@@ -137,88 +139,158 @@ start_date22 <- as.POSIXct("2022-09-13")
 dates22 <- as.data.frame(seq(start_date22, by = "day", length.out = 70)) %>%
   rename(DateTime = `seq(start_date22, by = "day", length.out = 70)`)
 dates22 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates22$DateTime, e = 0.26)
-peak22 <- ggplot(data = dates22, aes(x = date, y = moonPhase)) +
+peak22 <- ggplot(data = dates22, aes(x = date, y = moonPhase*100)) +
   geom_point() +
   geom_vline(aes(xintercept = as.POSIXct("2022-10-11 00:00:00"))) +
   geom_vline(aes(xintercept = as.POSIXct("2022-10-10 00:00:00")), colour = "red") +
   xlab("Date") +
-  ylab("Moon Phase (proportion)") +
+  ylab("Moon Phase") +
   ggtitle("2022") +
   theme_classic()
 
-jpeg(filename = "figures/FigureS7_moon_peak.jpeg", units = "cm", res = 300, width = 15, height = 12)
+###Figure S6####
+jpeg(filename = "figures/FigureS6_moon_peak.jpeg", units = "cm", res = 300, width = 15, height = 12)
 peak17 + peak18 + peak21 + peak22
 dev.off()
 ```
 
-```{r KS Test with prop tests}
-summary(moondates$moonlightModel)
-summary(chick$moonlightModel)
+```{r Moon Phase KS Test}
+ks.test(chick$moonPhase, moondates$moonPhase)
 
-ks.test(chick$moonlightModel, moondates$moonlightModel)
-wilcox.test(chick$moonlightModel, moondates$moonlightModel)
-
-moondates <- moondates %>%
-  mutate(illumcat = sjmisc::group_var(moondates$moonlightModel, size = 0.05, as.num = FALSE)) %>%
-  mutate(illumcat = ifelse(moonlightModel == 0, "0", illumcat)) %>%
-  mutate(illumcat = as.numeric(illumcat)*5)
-
-chick <- chick %>%
-  mutate(illumcat = sjmisc::group_var(moonlightModel, size = 0.05, as.num = FALSE)) %>%
-  mutate(illumcat = ifelse(moonlightModel < 0.00001, "0", illumcat)) %>%
-  mutate(illumcat = as.numeric(illumcat)*5)
-
-p <- as.data.frame(table(moondates$illumcat)) %>%
+moon_phase_prop <- as.data.frame(table(moondates$phasecat)) %>%
   mutate(prop = Freq/nrow(moondates)) %>%
   mutate(Var1 = as.numeric(as.character(Var1))) %>%
   arrange(Var1) %>%
-  mutate(Bin = Var1*5) %>%
   mutate(Expected = prop*120)
-q <- as.data.frame(table(chick$illumcat)) %>%
+chick_phase_prop <- as.data.frame(table(chick$phasecat)) %>%
   mutate(prop = Freq/nrow(chick)) %>%
   mutate(Var1 = as.numeric(as.character(Var1))) %>%
+  add_row(Var1 = 30, Freq = 0, prop = 0) %>%
+  arrange(Var1)
+
+prop.test(x = chick_phase_prop[1,2], n = 120, p = moon_phase_prop[1,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[2,2], n = 120, p = moon_phase_prop[2,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[3,2], n = 120, p = moon_phase_prop[3,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[4,2], n = 120, p = moon_phase_prop[4,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[5,2], n = 120, p = moon_phase_prop[5,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[6,2], n = 120, p = moon_phase_prop[6,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[7,2], n = 120, p = moon_phase_prop[7,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[8,2], n = 120, p = moon_phase_prop[8,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[9,2], n = 120, p = moon_phase_prop[9,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[10,2], n = 120, p = moon_phase_prop[10,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[11,2], n = 120, p = moon_phase_prop[11,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[12,2], n = 120, p = moon_phase_prop[12,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[13,2], n = 120, p = moon_phase_prop[13,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[14,2], n = 120, p = moon_phase_prop[14,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[15,2], n = 120, p = moon_phase_prop[15,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[16,2], n = 120, p = moon_phase_prop[16,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[17,2], n = 120, p = moon_phase_prop[17,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[18,2], n = 120, p = moon_phase_prop[18,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[19,2], n = 120, p = moon_phase_prop[19,2]/nrow(moondates))
+prop.test(x = chick_phase_prop[20,2], n = 120, p = moon_phase_prop[20,2]/nrow(moondates))
+```
+
+```{r Incident Moon Illumination KS Test}
+ks.test(chick$moonlightModel, moondates$moonlightModel)
+
+moon_III_prop <- as.data.frame(table(moondates$illumcat)) %>%
+  mutate(prop = Freq/nrow(moondates)) %>%
+  mutate(Var1 = as.numeric(as.character(Var1))) %>%
   arrange(Var1) %>%
-  mutate(Bin = Var1*5)
+  mutate(Expected = prop*120)
+chick_III_prop <- as.data.frame(table(chick$illumcat)) %>%
+  mutate(prop = Freq/nrow(chick)) %>%
+  mutate(Var1 = as.numeric(as.character(Var1))) %>%
+  add_row(Var1 = 25, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 40, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 45, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 50, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 55, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 60, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 65, Freq = 0, prop = 0) %>%
+  arrange(Var1)
+  
+prop.test(x = chick_III_prop[1,2], n = 120, p = moon_III_prop[1,2]/nrow(moondates))
+prop.test(x = chick_III_prop[2,2], n = 120, p = moon_III_prop[2,2]/nrow(moondates))
+prop.test(x = chick_III_prop[3,2], n = 120, p = moon_III_prop[3,2]/nrow(moondates))
+prop.test(x = chick_III_prop[4,2], n = 120, p = moon_III_prop[4,2]/nrow(moondates))
+prop.test(x = chick_III_prop[5,2], n = 120, p = moon_III_prop[5,2]/nrow(moondates))
+prop.test(x = chick_III_prop[6,2], n = 120, p = moon_III_prop[6,2]/nrow(moondates))
+prop.test(x = chick_III_prop[7,2], n = 120, p = moon_III_prop[7,2]/nrow(moondates))
+prop.test(x = chick_III_prop[8,2], n = 120, p = moon_III_prop[8,2]/nrow(moondates))
+prop.test(x = chick_III_prop[9,2], n = 120, p = moon_III_prop[9,2]/nrow(moondates))
+prop.test(x = chick_III_prop[10,2], n = 120, p = moon_III_prop[10,2]/nrow(moondates))
+prop.test(x = chick_III_prop[11,2], n = 120, p = moon_III_prop[11,2]/nrow(moondates))
+prop.test(x = chick_III_prop[12,2], n = 120, p = moon_III_prop[12,2]/nrow(moondates))
+prop.test(x = chick_III_prop[13,2], n = 120, p = moon_III_prop[13,2]/nrow(moondates))
+prop.test(x = chick_III_prop[14,2], n = 120, p = moon_III_prop[14,2]/nrow(moondates))
+```
 
-prop.test(x = q[1,2], n = 120, p = p[1,2]/nrow(moondates))
-prop.test(x = q[2,2], n = 120, p = p[2,2]/nrow(moondates))
-prop.test(x = q[3,2], n = 120, p = p[3,2]/nrow(moondates))
-prop.test(x = q[4,2], n = 120, p = p[4,2]/nrow(moondates))
-prop.test(x = q[5,2], n = 120, p = p[5,2]/nrow(moondates))
-prop.test(x = q[6,2], n = 120, p = p[6,2]/nrow(moondates))
-prop.test(x = q[7,2], n = 120, p = p[7,2]/nrow(moondates))
-prop.test(x = 0, n = 120, p = p[8,2]/nrow(moondates))
-prop.test(x = 0, n = 120, p = p[9,2]/nrow(moondates))
+```{r Figure 2}
+strand_phase_prop <- as.data.frame(table(strand$phasecat)) %>%
+  mutate(prop = Freq/nrow(strand)) %>%
+  mutate(Var1 = as.numeric(as.character(Var1))) %>%
+  arrange(Var1)
 
-ggplot(data = chick, aes(x = as.factor(illumcat))) +
-  geom_bar(aes(y = (..count..)/sum(..count..)), fill = "grey", colour = "black") +
-  theme_classic() +
-  xlab("Moon Illumination") +
+phase_points <- ggplot() +
+  xlab("Incident Moon Illumination Index") +
   ylab("Proportion of Chicks") +
-  ylim(0, 0.6)
+  geom_point(data = moon_phase_prop, aes(x = Var1, y = prop), colour = "darkgrey", size = 1) +
+  geom_point(data = chick_phase_prop, aes(x = Var1, y = prop), colour = "black", size = 1) +
+  geom_point(data = strand_phase_prop, aes(x = Var1, y = prop), colour = "red", size = 1) +
+  geom_smooth(data = moon_phase_prop, aes(x = Var1, y = prop), colour = "darkgrey", se = F) +
+  geom_smooth(data = chick_phase_prop, aes(x = Var1, y = prop), colour = "black", se = F) +
+  geom_smooth(data = strand_phase_prop, aes(x = Var1, y = prop), colour = "red", se = F) +
+  theme_classic()
+phase_points
 
-ggplot(data = moondates, aes(x = as.factor(illumcat))) +
-  geom_bar(aes(y = (..count..)/sum(..count..)), fill = "grey", colour = "black") +
+III_points <- ggplot() +
+  xlab("Moon Phase") +
+  ylab("Proportion of Chicks") +
+  geom_point(data = moon_III_prop, aes(x = Var1, y = prop), colour = "grey", size = 1) +
+  geom_point(data = chick_III_prop, aes(x = Var1, y = prop), colour = "black", size = 1) +
+  geom_smooth(data = moon_III_prop, aes(x = Var1, y = prop), colour = "grey", se = F) +
+  geom_smooth(data = chick_III_prop, aes(x = Var1, y = prop), colour = "black", se = F) +
+  theme_classic()
+III_points
+
+phase_points_hist <- ggplot() +
+  geom_bar(data = moondates, aes(x = as.factor(phasecat), y = (..count..)/sum(..count..)), fill = NA, colour = "darkgrey") +
+  geom_bar(data = chick, aes(x = as.factor(phasecat), y = (..count..)/sum(..count..)), colour = "black", fill = NA) +
+  geom_smooth(data = strand_phase_prop, aes(x = Var1/5, y = prop), colour = "red", se = F) +
   theme_classic() +
-  xlab("Moon Illumination") +
-  ylab("Proportion of Time") +
-  ylim(0, 0.6)
+  xlab("Moon Phase") +
+  ylab("Proportion of Chicks")
+phase_points_hist
 
-prop_hist <- ggplot() +
+phase_hist <- ggplot() +
+  geom_bar(data = moondates, aes(x = as.factor(phasecat), y = (..count..)/sum(..count..)), fill = "lightgrey", colour = "darkgrey") +
+  geom_bar(data = chick, aes(x = as.factor(phasecat), y = (..count..)/sum(..count..)), colour = "black", fill = NA) +
+  geom_bar(data = strand, aes(x = as.factor(phasecat), y = (..count..)/sum(..count..)), colour = "red", fill = NA) +
+  theme_classic() +
+  xlab("Moon Phase") +
+  ylab("Proportion of Chicks")
+phase_hist
+
+III_hist <- ggplot() +
   geom_bar(data = moondates, aes(x = as.factor(illumcat), y = (..count..)/sum(..count..)), fill = "lightgrey", colour = "darkgrey") +
   geom_bar(data = chick, aes(x = as.factor(illumcat), y = (..count..)/sum(..count..)), colour = "black", fill = NA) +
   theme_classic() +
-  xlab("Moon Illumination (%)") +
+  xlab("Incident Moon Illumination Index") +
   ylab("Proportion of Chicks") +
   ylim(0, 0.6)
+III_hist
 
-jpeg(filename = "figures/FigureS8_histograms.jpeg", units = "cm", res = 300, width = 15, height = 12)
-prop_hist
+phase_hist / III_hist
+phase_points / III_points
+
+###Figure 2####
+jpeg(filename = "figures/Figure2.jpeg", units = "cm", res = 300, width = 15, height = 18)
+phase_points / III_points + plot_annotation(tag_levels = list(c("A", "B")))
 dev.off()
 ```
 
-
-```{r}
+```{r Fledge when Moon is Up or Down}
 #Do chicks fledge when the moon is below the horizon?
 summary(as.factor(chick$MoonUp))
 summary(as.factor(moondates$MoonUp))
@@ -240,43 +312,24 @@ prop.test(x = 9, n = 120, p = 10494/195912) #fourth quarter down
 prop.test(x = 35, n = 120, p = 54194/195912) #fourth quarter up
 ```
 
-```{r Moon Phase Chi-squared}
-#Look at the distribution of chicks that fledged among the phases
-fledge_prop <- summary(chick$Phase)
-
-#the moon phases do not occur equally and the months are an arbitrary human invention - crop the moon dataset to the range of fledge dates for LESP
-moon$yDate <- yday(moon$Date)
-moon_lesp_range <- moon %>% filter(yDate < 318) %>%
-  filter(yDate > 255)
-
-#Chi-squared test
-summary(as.factor(moon_lesp_range$Phase))
-chisq.test(fledge_prop, p = c(113/372, 135/372, 61/372, 63/372))
-
-#Post-hoc tests
-prop.test(x = 34, n = 120, p = 113/372, alternative="two.sided") #First quarter
-prop.test(x = 10, n = 120, p = 61/372, alternative="two.sided")  #Second quarter
-prop.test(x = 32, n = 120, p = 63/372, alternative="two.sided")  #Third quarter
-prop.test(x = 44, n = 120, p = 135/372, alternative="two.sided") #Fourth quarter
-```
-
 ```{r Cloud Cover & Moon Phase Chi-squared}
 #Create a variable describing weather
-chick <- chick %>% mutate(CloudCat = ifelse(CloudCover < 50, "low", "high")) %>%
-  mutate(LightEnv = ifelse(Phase == "New Moon" & CloudCat == "low", "low1", ifelse(Phase == "first quarter" & CloudCat == "high", "high1", ifelse(Phase == "second quarter" & CloudCat == "low", "low2", ifelse(Phase == "second quarter" & CloudCat == "high", "high2", ifelse(Phase == "third quarter" & CloudCat == "low", "low3", ifelse(Phase == "third quarter" & CloudCat == "high", "high3", ifelse(Phase == "fourth quarter" & CloudCat == "low", "low4", "high4")))))) ))
+chick_weather <- chick %>% mutate(CloudCat = ifelse(CloudCover < 50, "low", "high")) %>%
+  mutate(LightEnv = ifelse(Phase == "first quarter" & CloudCat == "low", "low1", ifelse(Phase == "first quarter" & CloudCat == "high", "high1", ifelse(Phase == "second quarter" & CloudCat == "low", "low2", ifelse(Phase == "second quarter" & CloudCat == "high", "high2", ifelse(Phase == "third quarter" & CloudCat == "low", "low3", ifelse(Phase == "third quarter" & CloudCat == "high", "high3", ifelse(Phase == "fourth quarter" & CloudCat == "low", "low4", "high4")))))) ))
 
 #Crop the data to just the date range
 cloud_lesp_range <- left_join(cloud, moon, by = "Date") %>%
   drop_na(Moon_Illumination) %>%
   mutate(CloudCat = ifelse(CloudCover < 50, "low", "high")) %>%
   mutate(LightEnv = ifelse(Phase == "first quarter" & CloudCat == "low", "low1", ifelse(Phase == "first quarter" & CloudCat == "high", "high1", ifelse(Phase == "second quarter" & CloudCat == "low", "low2", ifelse(Phase == "second quarter" & CloudCat == "high", "high2", ifelse(Phase == "third quarter" & CloudCat == "low", "low3", ifelse(Phase == "third quarter" & CloudCat == "high", "high3", ifelse(Phase == "fourth quarter" & CloudCat == "low", "low4", "high4")))))))) %>%
+  mutate(yDate = yday(Date)) %>%
   filter(yDate < 318) %>%
   filter(yDate > 255)
 
 #Chi-squared test
-fledge_prop2 <- summary(as.factor(chick$LightEnv))
+fledge_prop2 <- summary(as.factor(chick_weather$LightEnv))
 summary(as.factor(cloud_lesp_range$LightEnv))
-chisq.test(fledge_prop2, p = c(73/372, 37/372, 42/372, 83/372, 40/372, 24/372, 21/372, 52/372))
+chisq.test(x = fledge_prop2, p = c(73/372, 37/372, 42/372, 83/372, 40/372, 24/372, 21/372, 52/372))
 
 #Post-hoc tests
 prop.test(x = 19, n = 120, p = 73/372, alternative="two.sided") #high1
@@ -303,7 +356,7 @@ bartable <- rbind(bartable, b)
 jpeg(filename = "figures/FigureS3_CloudMoonChi.jpeg", units = "cm", res = 300, width = 15, height = 13)
 ggplot(bartable) +
   geom_bar(aes(x = condition, y = value, fill = type), position = position_dodge(preserve = 'single'), stat = "identity", width = 0.6) +
-  scale_x_discrete(labels = c("First Quarter High Cover", "Second Quarter High Cover", "Third Quarter High Cover", "Fourth Quarter High Cover", "First Quarter Low Cover", "Second Quarter Low Cover", "Third Quarter Low Cover", "Fourth Quarter Low Cover")) +
+  scale_x_discrete(labels = c("New Moon High Cover", "25-50% Visible Moon High Cover", "50-75% Visible Moon High Cover", "Full Moon High Cover", "New Moon Low Cover", "25-50% Visible Moon Low Cover", "50-75% Visible Moon Low Cover", "Full Moon Low Cover")) +
   xlab("Environmental Conditions") +
   ylab("Number of Fledglings") +
   labs(fill = "Legend") +
@@ -348,54 +401,7 @@ ggplot(data = cloud_plot) +
 dev.off()
 ```
 
-```{r Fledging, Moon, and Strandings}
-#Create and clean up the strandings dataset
-#Want to get rid of days that had the lights on because this inflates the number of stranded birds
-strand <- read.csv("data/Fishplant_2022_Feb_27_2023_SG.csv") %>%
-  mutate(Date = as.POSIXlt(Date, format = "%m-%d-%Y")) %>%
-  mutate(Year = Date$year + 1900) %>%
-  filter(Year > 2018) %>%
-  filter(Database %like% "Sherry's Data") %>%
-  mutate(Stranded = as.numeric(Total_LESP)) %>%
-  mutate(Lunar = as.integer(round(Lunar))) %>%
-  dplyr::select(-(Plant_Lights_on.off:Number.of.Boxes)) %>%
-  dplyr::select(-(Total_LESP:Database)) %>%
-  drop_na() %>%
-  filter(Stranded < 100)
-  
-boxplot(strand$Stranded)
-
-moon_lesp_range <- moon_lesp_range %>% mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
-
-moon_new <- as.data.frame(table(moon_lesp_range$new_bin))
-
-chick_strand <- as.data.frame(table(as.integer(round(chick$Moon_Illumination)))) %>%
-  rename(Fledged = Freq, Lunar = Var1) %>%
-  mutate(Lunar = as.integer(as.character(Lunar))) %>%
-  full_join(summaryBy(Stranded ~ Lunar, data = na.omit(strand), FUN = sum)) %>%
-  mutate(Fledged = coalesce(Fledged, 0)) %>%
-  mutate(Stranded.sum = coalesce(Stranded.sum, 0)) %>%
-  add_row(Lunar = 22, Fledged = 0, Stranded.sum = 0) %>%
-  add_row(Lunar = 60, Fledged = 0, Stranded.sum = 0) %>%
-  arrange(Lunar) %>%
-  mutate(Moon = moon_new$Freq)
-
-plot(chick_strand$Stranded ~ chick_strand$Lunar, pch = 16)
-plot(chick_strand$Fledged ~ chick_strand$Lunar, pch = 16)
-
-jpeg(filename = "figures/Figure2_StrandFledge.jpeg", units = "cm", res = 300, width = 15, height = 10)
-ggplot(data = chick_strand) +
-  scale_y_continuous("Percent of Birds") +
-  coord_cartesian(xlim = c(0, 100), ylim = c(0, 3), expand = TRUE) +
-  xlim(0, 100) +
-  xlab("Percent of Moon Visible") +
-  geom_smooth(aes(x = Lunar, y = (Moon/sum(Moon))*100), method = NULL, colour = "grey", linetype = "solid", linewidth = 1, se = F) +
-  geom_smooth(aes(x = Lunar, y = (Fledged/sum(Fledged))*100), method = NULL, colour = "black", linetype = "solid", se = F) +
-  geom_smooth(aes(x = Lunar, y = (Stranded.sum/sum(Stranded.sum))*100), method = NULL, colour = "red", linetype = "dashed", se = F) +
-  theme_classic()
-dev.off()
-```
-
+#Old Code
 ```{r Lunar by Year}
 #Binned figures by year
 moon_binned17 <- moon_lesp_range %>%
@@ -511,4 +517,71 @@ table(chick_prop$IlluminationCat)
 table(moondates_prop$IlluminationCat)
 
 chisq.test(x = c(64/120, 32/120, 16/120, 8/120), p = c(72484/147577, 33903/147577, 10637/147577, 30553/147577))
+```
+
+```{r Moon Phase Chi}
+#Look at the distribution of chicks that fledged among the phases
+fledge_prop <- summary(chick$Phase)
+
+#the moon phases do not occur equally and the months are an arbitrary human invention - crop the moon dataset to the range of fledge dates for LESP
+moon$yDate <- yday(moon$Date)
+moon_lesp_range <- moon %>% filter(yDate < 318) %>%
+  filter(yDate > 255)
+
+#Chi-squared test
+summary(as.factor(moon_lesp_range$Phase))
+chisq.test(fledge_prop, p = c(113/372, 135/372, 61/372, 63/372))
+
+#Post-hoc tests
+prop.test(x = 34, n = 120, p = 113/372, alternative="two.sided") #First quarter
+prop.test(x = 10, n = 120, p = 61/372, alternative="two.sided")  #Second quarter
+prop.test(x = 32, n = 120, p = 63/372, alternative="two.sided")  #Third quarter
+prop.test(x = 44, n = 120, p = 135/372, alternative="two.sided") #Fourth quarter
+
+```
+
+```{r Fledging Moon and Strandings Figure}
+#Create and clean up the strandings dataset
+#Want to get rid of days that had the lights on because this inflates the number of stranded birds
+strand <- read.csv("data/Fishplant_2022_Feb_27_2023_SG.csv") %>%
+  mutate(Date = as.POSIXlt(Date, format = "%m-%d-%Y")) %>%
+  mutate(Year = Date$year + 1900) %>%
+  filter(Year > 2018) %>%
+  filter(Database %like% "Sherry's Data") %>%
+  mutate(Stranded = as.numeric(Total_LESP)) %>%
+  mutate(Lunar = as.integer(round(Lunar))) %>%
+  dplyr::select(-(Plant_Lights_on.off:Number.of.Boxes)) %>%
+  dplyr::select(-(Total_LESP:Database)) %>%
+  drop_na() %>%
+  filter(Stranded < 100)
+  
+boxplot(strand$Stranded)
+
+moon_lesp_range <- moon_lesp_range %>% mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+
+moon_new <- as.data.frame(table(moon_lesp_range$new_bin))
+
+chick_strand <- as.data.frame(table(as.integer(round(chick$Moon_Illumination)))) %>%
+  rename(Fledged = Freq, Lunar = Var1) %>%
+  mutate(Lunar = as.integer(as.character(Lunar))) %>%
+  full_join(summaryBy(Stranded ~ Lunar, data = na.omit(strand), FUN = sum)) %>%
+  mutate(Fledged = coalesce(Fledged, 0)) %>%
+  mutate(Stranded.sum = coalesce(Stranded.sum, 0)) %>%
+  add_row(Lunar = 22, Fledged = 0, Stranded.sum = 0) %>%
+  add_row(Lunar = 60, Fledged = 0, Stranded.sum = 0) %>%
+  arrange(Lunar) %>%
+  mutate(Moon = moon_new$Freq)
+
+plot(chick_strand$Stranded ~ chick_strand$Lunar, pch = 16)
+plot(chick_strand$Fledged ~ chick_strand$Lunar, pch = 16)
+
+phase_strand <- ggplot(data = chick_strand) +
+  scale_y_continuous("Proportion of Chicks", labels = function(x)x/100) +
+  coord_cartesian(xlim = c(0, 100), ylim = c(0, 3), expand = TRUE) +
+  xlim(0, 100) +
+  xlab("Moon Phase") +
+  geom_smooth(aes(x = Lunar, y = (Moon/sum(Moon))*100), method = NULL, colour = "grey", linetype = "solid", linewidth = 1, se = F) +
+  geom_smooth(aes(x = Lunar, y = (Fledged/sum(Fledged))*100), method = NULL, colour = "black", linetype = "solid", se = F) +
+  geom_smooth(aes(x = Lunar, y = (Stranded.sum/sum(Stranded.sum))*100), method = NULL, colour = "red", linetype = "dashed", se = F) +
+  theme_classic()
 ```

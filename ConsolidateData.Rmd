@@ -52,6 +52,51 @@ cloud$Date <- as.Date(cloud$Date)
 save(cloud, file = "data/cloud.Rda")
 ```
 
+#Moon Dataset
+```{r Moon Phase}
+start_date17 <- as.POSIXct("2017-09-13 00:00")
+start_date18 <- as.POSIXct("2018-09-13 00:00")
+start_date21 <- as.POSIXct("2021-09-13 00:00")
+start_date22 <- as.POSIXct("2022-09-13 00:00")
+`%ni%` <- Negate(`%in%`)
+
+dates17 <- as.data.frame(seq(start_date17, by = "min", length.out = 89340)) %>%
+  rename(DateTime = `seq(start_date17, by = "min", length.out = 89340)`) %>%
+  mutate(hour = hour(DateTime))
+dates17 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates17$DateTime, e = 0.26) %>%
+  filter(night == "TRUE")
+
+dates18 <- as.data.frame(seq(start_date18, by = "min", length.out = 89340)) %>%
+  rename(DateTime = `seq(start_date18, by = "min", length.out = 89340)`) %>%
+  mutate(hour = hour(DateTime))
+dates18 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates18$DateTime, e = 0.26) %>%
+  filter(night == "TRUE")
+
+dates21 <- as.data.frame(seq(start_date21, by = "min", length.out = 89340)) %>%
+  rename(DateTime = `seq(start_date21, by = "min", length.out = 89340)`) %>%
+  mutate(hour = hour(DateTime))
+dates21 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates21$DateTime, e = 0.26) %>%
+  filter(night == TRUE)
+
+dates22 <- as.data.frame(seq(start_date22, by = "min", length.out = 89340)) %>%
+  rename(DateTime = `seq(start_date22, by = "min", length.out = 89340)`) %>%
+  mutate(hour = hour(DateTime))
+dates22 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates22$DateTime, e = 0.26) %>%
+  filter(night == "TRUE")
+
+moondates <- rbind(dates17, dates18, dates21, dates22) %>%
+  filter(night == "TRUE") %>%
+  mutate(MoonUp = as.factor(ifelse(moonAltDegrees > 0, "UP", "DOWN"))) %>%
+  mutate(Phase = as.factor(ifelse(moonPhase < 0.25, "first quarter", ifelse(moonPhase < 0.5, "second quarter", ifelse(moonPhase < 0.75, "third quarter", "fourth quarter"))))) %>%
+  mutate(phasecat = sjmisc::group_var(moonPhase, size = 0.05, as.num = FALSE)) %>%
+  mutate(phasecat = as.numeric(phasecat)*5) %>%
+  mutate(illumcat = sjmisc::group_var(moonlightModel, size = 0.05, as.num = FALSE)) %>%
+  mutate(illumcat = ifelse(moonlightModel == 0, "0", illumcat)) %>%
+  mutate(illumcat = as.numeric(illumcat)*5)
+
+save(moondates, file = "data/moondates.Rda")
+```
+
 #Chick Fledging Dataset
 ```{r Chick Fledge Age}
 #Load data
@@ -96,44 +141,7 @@ chick$Year <- as.factor(chick$Year)
 chick$Plot <- as.factor(chick$Plot)
 ```
 
-```{r Moon Phase}
-start_date17 <- as.POSIXct("2017-09-13 00:00")
-start_date18 <- as.POSIXct("2018-09-13 00:00")
-start_date21 <- as.POSIXct("2021-09-13 00:00")
-start_date22 <- as.POSIXct("2022-09-13 00:00")
-`%ni%` <- Negate(`%in%`)
-
-dates17 <- as.data.frame(seq(start_date17, by = "min", length.out = 89340)) %>%
-  rename(DateTime = `seq(start_date17, by = "min", length.out = 89340)`) %>%
-  mutate(hour = hour(DateTime))
-dates17 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates17$DateTime, e = 0.26) %>%
-  filter(night == "TRUE")
-
-dates18 <- as.data.frame(seq(start_date18, by = "min", length.out = 89340)) %>%
-  rename(DateTime = `seq(start_date18, by = "min", length.out = 89340)`) %>%
-  mutate(hour = hour(DateTime))
-dates18 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates18$DateTime, e = 0.26) %>%
-  filter(night == "TRUE")
-
-dates21 <- as.data.frame(seq(start_date21, by = "min", length.out = 89340)) %>%
-  rename(DateTime = `seq(start_date21, by = "min", length.out = 89340)`) %>%
-  mutate(hour = hour(DateTime))
-dates21 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates21$DateTime, e = 0.26) %>%
-  filter(night == TRUE)
-
-dates22 <- as.data.frame(seq(start_date22, by = "min", length.out = 89340)) %>%
-  rename(DateTime = `seq(start_date22, by = "min", length.out = 89340)`) %>%
-  mutate(hour = hour(DateTime))
-dates22 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates22$DateTime, e = 0.26) %>%
-  filter(night == "TRUE")
-
-moondates <- rbind(dates17, dates18, dates21, dates22) %>%
-  filter(night == "TRUE") %>%
-  mutate(MoonUp = as.factor(ifelse(moonAltDegrees > 0, "UP", "DOWN"))) %>%
-  mutate(Phase = as.factor(ifelse(moonPhase < 0.25, "first quarter", ifelse(moonPhase < 0.5, "second quarter", ifelse(moonPhase < 0.75, "third quarter", "fourth quarter")))))
-save(moondates, file = "data/moondates.Rda")
-```
-
+#Combine Datasets
 ```{r Moon Fledge}
 #Add the moon phase data
 moon <- read.csv("data/Moon_Phase_17_22.csv")
@@ -172,9 +180,42 @@ chick$TimeAfterSunset <- (chick$ITime - chick$Sunset)/60
 #Moon data from moonlit
 chick_moon <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = chick$DateTime, e = 0.26)
 chick <- cbind(chick, chick_moon[,4:10]) %>%
-  mutate(MoonUp = as.factor(ifelse(moonAltDegrees > 0, "UP", "DOWN")))
+  mutate(MoonUp = as.factor(ifelse(moonAltDegrees > 0, "UP", "DOWN"))) %>%
+  mutate(phasecat = sjmisc::group_var(moonPhase, size = 0.05, as.num = FALSE)) %>%
+  mutate(phasecat = as.numeric(phasecat)*5) %>%
+  mutate(phasecat = ifelse(phasecat > 25, phasecat + 5, phasecat)) %>%
+  mutate(illumcat = sjmisc::group_var(moonlightModel, size = 0.05, as.num = FALSE)) %>%
+  mutate(illumcat = ifelse(moonlightModel < 0.00001, "0", illumcat)) %>%
+  mutate(illumcat = as.numeric(illumcat)*5) %>%
+  mutate(illumcat = ifelse(illumcat > 20, illumcat + 5, illumcat))
 
 #Save the dataframes
 save(moon, file = "data/moon.Rda")
 save(chick, file = "data/chick.Rda")
+```
+
+#Strandings Data
+Data from Burt et al. 2021
+```{r Strandings Data}
+#Create and clean up the strandings dataset
+#Want to get rid of days that had the lights on because this inflates the number of stranded birds
+strand_BdV <- read.csv("data/Fishplant_2022_Feb_27_2023_SG.csv") %>%
+  mutate(Date = as.POSIXlt(Date, format = "%m-%d-%Y")) %>%
+  mutate(Year = Date$year + 1900) %>%
+  filter(Year > 2018) %>%
+  filter(Database %like% "Sherry's Data") %>%
+  mutate(Stranded = as.numeric(Total_LESP)) %>%
+  mutate(Lunar = as.integer(round(Lunar))) %>%
+  dplyr::select(-(Plant_Lights_on.off:Number.of.Boxes)) %>%
+  dplyr::select(-(Total_LESP:Database)) %>%
+  drop_na() %>%
+  filter(Stranded < 100)
+
+strand_rep <- strand_BdV[rep(row.names(strand_BdV), strand_BdV$Stranded), 1:5]
+
+strand <- calculateMoonlightIntensity(lat = 48.09780, lon = -52.89831, date = as.POSIXct(strand_rep$Date), e = 0.26) %>%
+  mutate(phasecat = sjmisc::group_var(moonPhase, size = 0.05, as.num = FALSE)) %>%
+  mutate(phasecat = as.numeric(phasecat)*5)
+
+save(strand, file = "data/strand.Rda")
 ```
