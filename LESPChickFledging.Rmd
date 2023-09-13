@@ -7,8 +7,9 @@ editor_options:
   chunk_output_type: console
 ---
 
-```{r Load Packages}
+```{r Load Packages and Data}
 rm(list=ls())
+options(scipen = 999)
 
 #Libraries
 library(tidyverse)
@@ -16,11 +17,14 @@ library(patchwork)
 library(lubridate)
 library(data.table)
 library(doBy)
+library(moonlit)
+library(sjmisc)
 
 #Data frames
 load("data/chick.Rda")
 load("data/moon.Rda")
 load("data/cloud.Rda")
+load("data/moondates.Rda")
 ```
 
 ```{r Summary Stats}
@@ -89,6 +93,153 @@ summary(date_mod)
 TukeyHSD(date_mod)
 ```
 
+```{r Moon Phase on Peak Fledge Day}
+start_date17 <- as.POSIXct("2017-09-13")
+dates17 <- as.data.frame(seq(start_date17, by = "day", length.out = 70)) %>%
+  rename(DateTime = `seq(start_date17, by = "day", length.out = 70)`)
+dates17 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates17$DateTime, e = 0.26)
+peak17 <- ggplot(data = dates17, aes(x = date, y = moonPhase)) +
+  geom_point() +
+  geom_vline(aes(xintercept = as.POSIXct("2017-10-11 00:00:00"))) +
+  geom_vline(aes(xintercept = as.POSIXct("2017-10-10 00:00:00")), colour = "red") +
+  xlab("Date") +
+  ylab("Moon Phase (proportion)") +
+  ggtitle("2017") +
+  theme_classic()
+
+start_date18 <- as.POSIXct("2018-09-13")
+dates18 <- as.data.frame(seq(start_date18, by = "day", length.out = 70)) %>%
+  rename(DateTime = `seq(start_date18, by = "day", length.out = 70)`)
+dates18 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates18$DateTime, e = 0.26)
+peak18 <- ggplot(data = dates18, aes(x = date, y = moonPhase)) +
+  geom_point() +
+  geom_vline(aes(xintercept = as.POSIXct("2018-10-8 00:00:00"))) +
+  geom_vline(aes(xintercept = as.POSIXct("2018-10-10 00:00:00")), colour = "red") +
+  xlab("Date") +
+  ylab("Moon Phase (proportion)") +
+  ggtitle("2018") +
+  theme_classic()
+
+start_date21 <- as.POSIXct("2021-09-13")
+dates21 <- as.data.frame(seq(start_date21, by = "day", length.out = 70)) %>%
+  rename(DateTime = `seq(start_date21, by = "day", length.out = 70)`)
+dates21 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates21$DateTime, e = 0.26)
+peak21 <- ggplot(data = dates21, aes(x = date, y = moonPhase)) +
+  geom_point() +
+  geom_vline(aes(xintercept = as.POSIXct("2021-09-29 00:00:00"))) +
+  geom_vline(aes(xintercept = as.POSIXct("2021-10-10 00:00:00")), colour = "red") +
+  xlab("Date") +
+  ylab("Moon Phase (proportion)") +
+  ggtitle("2021") +
+  theme_classic()
+
+start_date22 <- as.POSIXct("2022-09-13")
+dates22 <- as.data.frame(seq(start_date22, by = "day", length.out = 70)) %>%
+  rename(DateTime = `seq(start_date22, by = "day", length.out = 70)`)
+dates22 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates22$DateTime, e = 0.26)
+peak22 <- ggplot(data = dates22, aes(x = date, y = moonPhase)) +
+  geom_point() +
+  geom_vline(aes(xintercept = as.POSIXct("2022-10-11 00:00:00"))) +
+  geom_vline(aes(xintercept = as.POSIXct("2022-10-10 00:00:00")), colour = "red") +
+  xlab("Date") +
+  ylab("Moon Phase (proportion)") +
+  ggtitle("2022") +
+  theme_classic()
+
+jpeg(filename = "figures/FigureS7_moon_peak.jpeg", units = "cm", res = 300, width = 15, height = 12)
+peak17 + peak18 + peak21 + peak22
+dev.off()
+```
+
+```{r KS Test with prop tests}
+summary(moondates$moonlightModel)
+summary(chick$moonlightModel)
+
+ks.test(chick$moonlightModel, moondates$moonlightModel)
+wilcox.test(chick$moonlightModel, moondates$moonlightModel)
+
+moondates <- moondates %>%
+  mutate(illumcat = sjmisc::group_var(moondates$moonlightModel, size = 0.05, as.num = FALSE)) %>%
+  mutate(illumcat = ifelse(moonlightModel == 0, "0", illumcat)) %>%
+  mutate(illumcat = as.numeric(illumcat)*5)
+
+chick <- chick %>%
+  mutate(illumcat = sjmisc::group_var(moonlightModel, size = 0.05, as.num = FALSE)) %>%
+  mutate(illumcat = ifelse(moonlightModel < 0.00001, "0", illumcat)) %>%
+  mutate(illumcat = as.numeric(illumcat)*5)
+
+p <- as.data.frame(table(moondates$illumcat)) %>%
+  mutate(prop = Freq/nrow(moondates)) %>%
+  mutate(Var1 = as.numeric(as.character(Var1))) %>%
+  arrange(Var1) %>%
+  mutate(Bin = Var1*5) %>%
+  mutate(Expected = prop*120)
+q <- as.data.frame(table(chick$illumcat)) %>%
+  mutate(prop = Freq/nrow(chick)) %>%
+  mutate(Var1 = as.numeric(as.character(Var1))) %>%
+  arrange(Var1) %>%
+  mutate(Bin = Var1*5)
+
+prop.test(x = q[1,2], n = 120, p = p[1,2]/nrow(moondates))
+prop.test(x = q[2,2], n = 120, p = p[2,2]/nrow(moondates))
+prop.test(x = q[3,2], n = 120, p = p[3,2]/nrow(moondates))
+prop.test(x = q[4,2], n = 120, p = p[4,2]/nrow(moondates))
+prop.test(x = q[5,2], n = 120, p = p[5,2]/nrow(moondates))
+prop.test(x = q[6,2], n = 120, p = p[6,2]/nrow(moondates))
+prop.test(x = q[7,2], n = 120, p = p[7,2]/nrow(moondates))
+prop.test(x = 0, n = 120, p = p[8,2]/nrow(moondates))
+prop.test(x = 0, n = 120, p = p[9,2]/nrow(moondates))
+
+ggplot(data = chick, aes(x = as.factor(illumcat))) +
+  geom_bar(aes(y = (..count..)/sum(..count..)), fill = "grey", colour = "black") +
+  theme_classic() +
+  xlab("Moon Illumination") +
+  ylab("Proportion of Chicks") +
+  ylim(0, 0.6)
+
+ggplot(data = moondates, aes(x = as.factor(illumcat))) +
+  geom_bar(aes(y = (..count..)/sum(..count..)), fill = "grey", colour = "black") +
+  theme_classic() +
+  xlab("Moon Illumination") +
+  ylab("Proportion of Time") +
+  ylim(0, 0.6)
+
+prop_hist <- ggplot() +
+  geom_bar(data = moondates, aes(x = as.factor(illumcat), y = (..count..)/sum(..count..)), fill = "lightgrey", colour = "darkgrey") +
+  geom_bar(data = chick, aes(x = as.factor(illumcat), y = (..count..)/sum(..count..)), colour = "black", fill = NA) +
+  theme_classic() +
+  xlab("Moon Illumination (%)") +
+  ylab("Proportion of Chicks") +
+  ylim(0, 0.6)
+
+jpeg(filename = "figures/FigureS8_histograms.jpeg", units = "cm", res = 300, width = 15, height = 12)
+prop_hist
+dev.off()
+```
+
+
+```{r}
+#Do chicks fledge when the moon is below the horizon?
+summary(as.factor(chick$MoonUp))
+summary(as.factor(moondates$MoonUp))
+
+chisq.test(x = c(64/120, 56/120), p = c(72484/147577, 75093/147577)) #no difference between the proportion of chicks that fledge when the moon is below the horizon and those that fledge when the moon is above the horizon
+    #i.e. chicks do not seem to intentionally fledge when the moon is not out yet
+
+summary(as.factor(chick$MoonUp))
+table(chick$MoonUp, chick$Phase)
+table(moondates$MoonUp, moondates$Phase)
+boxplot(chick$moonPhase ~ chick$MoonUp)
+plot(moondates$moonAltDegrees ~ moondates$moonPhase) #the moon tends to be above the horizon more when it is more full
+
+chisq.test(x = c(31/120, 9/120, 5/120, 19/120, 3/120, 35/120, 5/120, 13/120), p = c(51957/195912, 10494/195912, 20006/195912, 14043/195912, 10807/195912, 54194/195912, 14431/195912, 19980/195912))
+
+prop.test(x = 31, n = 120, p = 51957/195912) #first quarter down
+prop.test(x = 3, n = 120, p = 10807/195912) #first quarter up
+prop.test(x = 9, n = 120, p = 10494/195912) #fourth quarter down
+prop.test(x = 35, n = 120, p = 54194/195912) #fourth quarter up
+```
+
 ```{r Moon Phase Chi-squared}
 #Look at the distribution of chicks that fledged among the phases
 fledge_prop <- summary(chick$Phase)
@@ -112,7 +263,7 @@ prop.test(x = 44, n = 120, p = 135/372, alternative="two.sided") #Fourth quarter
 ```{r Cloud Cover & Moon Phase Chi-squared}
 #Create a variable describing weather
 chick <- chick %>% mutate(CloudCat = ifelse(CloudCover < 50, "low", "high")) %>%
-  mutate(LightEnv = ifelse(Phase == "first quarter" & CloudCat == "low", "low1", ifelse(Phase == "first quarter" & CloudCat == "high", "high1", ifelse(Phase == "second quarter" & CloudCat == "low", "low2", ifelse(Phase == "second quarter" & CloudCat == "high", "high2", ifelse(Phase == "third quarter" & CloudCat == "low", "low3", ifelse(Phase == "third quarter" & CloudCat == "high", "high3", ifelse(Phase == "fourth quarter" & CloudCat == "low", "low4", "high4")))))) ))
+  mutate(LightEnv = ifelse(Phase == "New Moon" & CloudCat == "low", "low1", ifelse(Phase == "first quarter" & CloudCat == "high", "high1", ifelse(Phase == "second quarter" & CloudCat == "low", "low2", ifelse(Phase == "second quarter" & CloudCat == "high", "high2", ifelse(Phase == "third quarter" & CloudCat == "low", "low3", ifelse(Phase == "third quarter" & CloudCat == "high", "high3", ifelse(Phase == "fourth quarter" & CloudCat == "low", "low4", "high4")))))) ))
 
 #Crop the data to just the date range
 cloud_lesp_range <- left_join(cloud, moon, by = "Date") %>%
@@ -330,4 +481,34 @@ p22 <- ggplot(data = newdf22)+
 jpeg(filename = "figures/FigureS6_LunarbyYear.jpeg", units = "cm", res = 300, width = 15, height = 12)
 p17 + p18 + p21 + p22
 dev.off()
+```
+
+```{r Resampling}
+z <- as.data.frame(t(replicate(10000, ks.test(sample(moondates$moonlightModel, size = 1000, replace = FALSE), chick$moonlightModel)))) %>%
+  mutate(p.value = as.numeric(p.value)) %>%
+  mutate(statistic = as.character(statistic)) %>%
+  mutate(statistic = gsub("[()]", "", statistic)) %>%
+  mutate(statistic = gsub("cD = ", "", statistic)) %>%
+  mutate(statistic = as.numeric(statistic))
+
+hist(z$statistic)
+summary(z$statistic)
+
+hist(z$p.value)
+summary(z$p.value)
+```
+
+```{r Moon analysis with moonlit package}
+#not sure how to make the breaks in illumination
+moondates_prop <- moondates %>%
+  mutate(IlluminationCat = as.factor(ifelse(moonlightModel == 0, "A", ifelse(moonlightModel < 0.05, "B", ifelse(moonlightModel < 0.1, "C", "D"))))) %>%
+  select(IlluminationCat)
+chick_prop <- chick %>%
+  mutate(IlluminationCat = as.factor(ifelse(moonlightModel == 0, "A", ifelse(moonlightModel < 0.05, "B", ifelse(moonlightModel < 0.1, "C", "D"))))) %>%
+  select(IlluminationCat)
+
+table(chick_prop$IlluminationCat)
+table(moondates_prop$IlluminationCat)
+
+chisq.test(x = c(64/120, 32/120, 16/120, 8/120), p = c(72484/147577, 33903/147577, 10637/147577, 30553/147577))
 ```

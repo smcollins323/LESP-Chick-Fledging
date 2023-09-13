@@ -10,12 +10,14 @@ editor_options:
 #Load Packages
 ```{r Libraries}
 rm(list=ls())
+options(scipen = 999)
 
 library(ncdf4)
 library(tidyverse)
 library(lubridate)
 library(data.table)
 library(chillR)
+library(moonlit)
 ```
 
 #Cloud Cover Dataset
@@ -92,7 +94,47 @@ chick <- rbind(chick, chick_2)
 chick$ITime <- (chick$ITime - 64800)/60
 chick$Year <- as.factor(chick$Year)
 chick$Plot <- as.factor(chick$Plot)
+```
 
+```{r Moon Phase}
+start_date17 <- as.POSIXct("2017-09-13 00:00")
+start_date18 <- as.POSIXct("2018-09-13 00:00")
+start_date21 <- as.POSIXct("2021-09-13 00:00")
+start_date22 <- as.POSIXct("2022-09-13 00:00")
+`%ni%` <- Negate(`%in%`)
+
+dates17 <- as.data.frame(seq(start_date17, by = "min", length.out = 89340)) %>%
+  rename(DateTime = `seq(start_date17, by = "min", length.out = 89340)`) %>%
+  mutate(hour = hour(DateTime))
+dates17 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates17$DateTime, e = 0.26) %>%
+  filter(night == "TRUE")
+
+dates18 <- as.data.frame(seq(start_date18, by = "min", length.out = 89340)) %>%
+  rename(DateTime = `seq(start_date18, by = "min", length.out = 89340)`) %>%
+  mutate(hour = hour(DateTime))
+dates18 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates18$DateTime, e = 0.26) %>%
+  filter(night == "TRUE")
+
+dates21 <- as.data.frame(seq(start_date21, by = "min", length.out = 89340)) %>%
+  rename(DateTime = `seq(start_date21, by = "min", length.out = 89340)`) %>%
+  mutate(hour = hour(DateTime))
+dates21 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates21$DateTime, e = 0.26) %>%
+  filter(night == TRUE)
+
+dates22 <- as.data.frame(seq(start_date22, by = "min", length.out = 89340)) %>%
+  rename(DateTime = `seq(start_date22, by = "min", length.out = 89340)`) %>%
+  mutate(hour = hour(DateTime))
+dates22 <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = dates22$DateTime, e = 0.26) %>%
+  filter(night == "TRUE")
+
+moondates <- rbind(dates17, dates18, dates21, dates22) %>%
+  filter(night == "TRUE") %>%
+  mutate(MoonUp = as.factor(ifelse(moonAltDegrees > 0, "UP", "DOWN"))) %>%
+  mutate(Phase = as.factor(ifelse(moonPhase < 0.25, "first quarter", ifelse(moonPhase < 0.5, "second quarter", ifelse(moonPhase < 0.75, "third quarter", "fourth quarter")))))
+save(moondates, file = "data/moondates.Rda")
+```
+
+```{r Moon Fledge}
 #Add the moon phase data
 moon <- read.csv("data/Moon_Phase_17_22.csv")
 moon$ID <- rownames(moon)
@@ -126,6 +168,11 @@ chick <- left_join(chick, cloud, by = "Date")
 sunset <- as.data.frame(daylength(47.26265, chick$yDate, notimes.as.na = FALSE))
 chick$Sunset <- as.integer(sunset$Sunset*60 - (18*60))
 chick$TimeAfterSunset <- (chick$ITime - chick$Sunset)/60
+
+#Moon data from moonlit
+chick_moon <- calculateMoonlightIntensity(lat = 47.26265, lon = -52.77187, date = chick$DateTime, e = 0.26)
+chick <- cbind(chick, chick_moon[,4:10]) %>%
+  mutate(MoonUp = as.factor(ifelse(moonAltDegrees > 0, "UP", "DOWN")))
 
 #Save the dataframes
 save(moon, file = "data/moon.Rda")
