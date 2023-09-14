@@ -233,7 +233,7 @@ strand_phase_prop <- as.data.frame(table(strand$phasecat)) %>%
   arrange(Var1)
 
 phase_points <- ggplot() +
-  xlab("Incident Moon Illumination Index") +
+  xlab("Moon Phase") +
   ylab("Proportion of Chicks") +
   geom_point(data = moon_phase_prop, aes(x = Var1, y = prop), colour = "darkgrey", size = 1) +
   geom_point(data = chick_phase_prop, aes(x = Var1, y = prop), colour = "black", size = 1) +
@@ -245,7 +245,7 @@ phase_points <- ggplot() +
 phase_points
 
 III_points <- ggplot() +
-  xlab("Moon Phase") +
+  xlab("Incident Moon Illumination Index") +
   ylab("Proportion of Chicks") +
   geom_point(data = moon_III_prop, aes(x = Var1, y = prop), colour = "grey", size = 1) +
   geom_point(data = chick_III_prop, aes(x = Var1, y = prop), colour = "black", size = 1) +
@@ -367,18 +367,22 @@ dev.off()
 
 ```{r Cloud Cover Chi-squared}
 #Categorize cloud cover
-chick <- chick %>%
+chick_cloud <- chick %>%
   mutate(CloudCover = as.numeric(CloudCover)) %>%
-  mutate(Cloud_binned = ifelse(CloudCover < 25, "first", ifelse(CloudCover < 50, "second", ifelse(CloudCover > 74, "fourth", "third"))))
-
+  mutate(Cloud_binned = ifelse(CloudCover < 25, "first", ifelse(CloudCover < 50, "second", ifelse(CloudCover > 74, "fourth", "third")))) %>%
+  mutate(CloudBin = sjmisc::group_var(CloudCover, size = 10, as.num = FALSE)) %>%
+  mutate(CloudBin = (as.numeric(CloudBin)-1)*10)
+  
 #Calculate observed number of fledglings in each category
-summary(as.factor(chick$Cloud_binned))
-fledge_prop3 <- summary(as.factor(chick$Cloud_binned))
+summary(as.factor(chick_cloud$Cloud_binned))
+fledge_prop3 <- summary(as.factor(chick_cloud$Cloud_binned))
 
 #Calculate expected proportion of fledglings in each category
 cloud_lesp_range <- cloud_lesp_range %>% 
   mutate(CloudCover = as.numeric(CloudCover)) %>%
-  mutate(new_bin = cut(CloudCover, breaks = 4, right = F))
+  mutate(new_bin = cut(CloudCover, breaks = 4, right = F)) %>%
+  mutate(CloudBin = sjmisc::group_var(CloudCover, size = 10, as.num = FALSE)) %>%
+  mutate(CloudBin = (as.numeric(CloudBin)-1)*10)
 summary(as.factor(cloud_lesp_range$new_bin))
 
 #Chi-squared test
@@ -386,7 +390,7 @@ chisq.test(fledge_prop3, p = c(46/372, 163/372, 61/372, 102/372))
 
 ####FigureS4####
 cloud_plot <- as.data.frame(table(cloud_lesp_range$CloudCover)) %>%
-  left_join(as.data.frame(table(chick$CloudCover)), by = "Var1") %>%
+  left_join(as.data.frame(table(chick_cloud$CloudCover)), by = "Var1") %>%
   rename(CloudCover = Var1, Expected = Freq.x, Observed = Freq.y) %>%
   replace(is.na(.), 0) %>%
   mutate(CloudCover = as.numeric(CloudCover), Expected = as.numeric(Expected))
@@ -395,93 +399,105 @@ jpeg(filename = "figures/FigureS4_CloudChi.jpeg", units = "cm", res = 300, width
 ggplot(data = cloud_plot) +
   ylab("Percent of Birds") +
   xlab("Cloud Cover (%)") +
-  geom_smooth(aes(x = CloudCover, y = (Expected/sum(Expected))*100), method = NULL, colour = "red", linetype = "dashed", linewidth = 1, se = F) +
+  geom_smooth(aes(x = CloudCover, y = (Expected/sum(Expected))*100), method = NULL, colour = "grey", linewidth = 1, se = F) +
   geom_smooth(aes(x = CloudCover, y = (Observed/sum(Observed))*100), method = NULL, colour = "black", linetype = "solid", se = F) +
   theme_classic()
 dev.off()
 ```
 
-#Old Code
-```{r Lunar by Year}
+```{r Moon Phase by Year}
+moon_lesp_range <- moon %>%
+  mutate(yDate = yday(Date)) %>%
+  filter(yDate < 318) %>%
+  filter(yDate > 255)
+
 #Binned figures by year
 moon_binned17 <- moon_lesp_range %>%
   filter(Date < "2018-01-01") %>%
-  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+  mutate(new_bin = cut(Moon_Illumination, breaks = 20, right = F))
 moon_binned17 <- as.data.frame(summary(moon_binned17$new_bin))
 fledge_binned17 <- chick %>%
   filter(Date < "2018-01-01") %>%
-  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+  mutate(new_bin = cut(Moon_Illumination, breaks = 20, right = F))
 fledge_binned17 <- as.data.frame(summary(fledge_binned17$new_bin))
-newdf17 <- as.data.frame(cbind((seq(1:100)-1), moon_binned17/62, fledge_binned17/30))
+newdf17 <- as.data.frame(cbind((seq(1:20)-1), moon_binned17/62, fledge_binned17/30))
 names(newdf17) <- c("Phase", "Moon", "Chick")
 
 p17 <- ggplot(data = newdf17)+
-  xlab("Moon Illumination (%)")+
-  ylab("Proportion")+
+  xlab("Moon Phase")+
+  ylab("Proportion of Chicks")+
   ggtitle("2017")+
+  geom_point(aes(x = Phase, y = Chick), colour = "black", size = 1) +
+  geom_point(aes(x = Phase, y = Moon), colour = "grey", size = 1) +
   geom_smooth(aes(x = Phase, y = Chick), linewidth = 1, colour = "black", se = F) +
-  geom_smooth(aes(x = Phase, y = Moon), linetype = "dashed", linewidth = 1, colour = "red", se = F) +
+  geom_smooth(aes(x = Phase, y = Moon), linewidth = 1, colour = "grey", se = F) +
   theme(panel.background = element_rect(fill = 'white', colour = 'black'), legend.position = "none")
 
 moon_binned18 <- moon_lesp_range %>%
   filter(Date < "2019-01-01") %>%
   filter(Date > "2018-01-01") %>%
-  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+  mutate(new_bin = cut(Moon_Illumination, breaks = 20, right = F))
 moon_binned18 <- as.data.frame(summary(moon_binned18$new_bin))
 fledge_binned18 <- chick %>%
   filter(Date < "2019-01-01") %>%
   filter(Date > "2018-01-01") %>%
-  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+  mutate(new_bin = cut(Moon_Illumination, breaks = 20, right = F))
 fledge_binned18 <- as.data.frame(summary(fledge_binned18$new_bin))
-newdf18 <- as.data.frame(cbind((seq(1:100)-1), moon_binned18/62, fledge_binned18/41))
+newdf18 <- as.data.frame(cbind((seq(1:20)-1), moon_binned18/62, fledge_binned18/41))
 names(newdf18) <- c("Phase", "Moon", "Chick")
 
 p18 <- ggplot(data = newdf18)+
-  xlab("Moon Illumination (%)")+
-  ylab("Proportion")+
+  xlab("Moon Phase")+
+  ylab("Proportion of Chicks")+
   ggtitle("2018")+
+  geom_point(aes(x = Phase, y = Chick), colour = "black", size = 1) +
+  geom_point(aes(x = Phase, y = Moon), colour = "grey", size = 1) +
   geom_smooth(aes(x = Phase, y = Chick), linewidth = 1, colour = "black", se = F) +
-  geom_smooth(aes(x = Phase, y = Moon), linetype = "dashed", linewidth = 1, colour = "red", se = F) +
+  geom_smooth(aes(x = Phase, y = Moon), linewidth = 1, colour = "grey", se = F) +
   theme(panel.background = element_rect(fill = 'white', colour = 'black'), legend.position = "none")
 
 moon_binned21 <- moon_lesp_range %>%
   filter(Date < "2022-01-01") %>%
   filter(Date > "2021-01-01") %>%
-  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+  mutate(new_bin = cut(Moon_Illumination, breaks = 20, right = F))
 moon_binned21 <- as.data.frame(summary(moon_binned21$new_bin))
 fledge_binned21 <- chick %>%
   filter(Date < "2022-01-01") %>%
   filter(Date > "2021-01-01") %>%
-  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+  mutate(new_bin = cut(Moon_Illumination, breaks = 20, right = F))
 fledge_binned21 <- as.data.frame(summary(fledge_binned21$new_bin))
-newdf21 <- as.data.frame(cbind((seq(1:100)-1), moon_binned21/62, fledge_binned21/9))
+newdf21 <- as.data.frame(cbind((seq(1:20)-1), moon_binned21/62, fledge_binned21/9))
 names(newdf21) <- c("Phase", "Moon", "Chick")
 
 p21 <- ggplot(data = newdf21)+
-  xlab("Moon Illumination (%)")+
-  ylab("Proportion")+
+  xlab("Moon Phase")+
+  ylab("Proportion of Chicks")+
   ggtitle("2021")+
+  geom_point(aes(x = Phase, y = Chick), colour = "black", size = 1) +
+  geom_point(aes(x = Phase, y = Moon), colour = "grey", size = 1) +
   geom_smooth(aes(x = Phase, y = Chick), linewidth = 1, colour = "black", se = F) +
-  geom_smooth(aes(x = Phase, y = Moon), linetype = "dashed", linewidth = 1, colour = "red", se = F) +
+  geom_smooth(aes(x = Phase, y = Moon), linewidth = 1, colour = "grey", se = F) +
   theme(panel.background = element_rect(fill = 'white', colour = 'black'), legend.position = "none")
 
 moon_binned22 <- moon_lesp_range %>%
   filter(Date > "2022-01-01") %>%
-  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+  mutate(new_bin = cut(Moon_Illumination, breaks = 20, right = F))
 moon_binned22 <- as.data.frame(summary(moon_binned22$new_bin))
 fledge_binned22 <- chick %>%
   filter(Date > "2022-01-01") %>%
-  mutate(new_bin = cut(Moon_Illumination, breaks = 100, right = F))
+  mutate(new_bin = cut(Moon_Illumination, breaks = 20, right = F))
 fledge_binned22 <- as.data.frame(summary(fledge_binned22$new_bin))
-newdf22 <- as.data.frame(cbind((seq(1:100)-1), moon_binned22/62, fledge_binned22/40))
+newdf22 <- as.data.frame(cbind((seq(1:20)-1), moon_binned22/62, fledge_binned22/40))
 names(newdf22) <- c("Phase", "Moon", "Chick")
 
 p22 <- ggplot(data = newdf22)+
-  xlab("Moon Illumination (%)")+
-  ylab("Proportion")+
+  xlab("Moon Phase")+
+  ylab("Proportion of Chicks")+
   ggtitle("2022")+
+  geom_point(aes(x = Phase, y = Chick), colour = "black", size = 1) +
+  geom_point(aes(x = Phase, y = Moon), colour = "grey", size = 1) +
   geom_smooth(aes(x = Phase, y = Chick), linewidth = 1, colour = "black", se = F) +
-  geom_smooth(aes(x = Phase, y = Moon), linetype = "dashed", linewidth = 1, colour = "red", se = F) +
+  geom_smooth(aes(x = Phase, y = Moon), linewidth = 1, colour = "grey", se = F) +
   theme(panel.background = element_rect(fill = 'white', colour = 'black'), legend.position = "none")
 
 jpeg(filename = "figures/FigureS6_LunarbyYear.jpeg", units = "cm", res = 300, width = 15, height = 12)
@@ -489,6 +505,169 @@ p17 + p18 + p21 + p22
 dev.off()
 ```
 
+```{r IMII by Year}
+moon_III_prop17 <- moondates %>% 
+  filter(date < "2018-01-01 00:00:00")
+moon_III_prop17 <- as.data.frame(table(moon_III_prop17$illumcat)) %>%
+  mutate(prop = Freq/nrow(moondates)) %>%
+  mutate(Var1 = as.numeric(as.character(Var1))) %>%
+  add_row(Var1 = 60, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 65, Freq = 0, prop = 0) %>%
+  mutate(Expected = prop*30) %>%
+  arrange(Var1)
+
+moon_III_prop18 <- moondates %>% 
+  filter(date > "2018-01-01 00:00:00") %>%
+  filter(date < "2019-01-01 00:00:00")
+moon_III_prop18 <- as.data.frame(table(moon_III_prop18$illumcat)) %>%
+  mutate(prop = Freq/nrow(moondates)) %>%
+  mutate(Var1 = as.numeric(as.character(Var1))) %>%
+  add_row(Var1 = 55, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 60, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 65, Freq = 0, prop = 0) %>%
+  arrange(Var1) %>%
+  mutate(Expected = prop*41)
+
+moon_III_prop21 <- moondates %>% 
+  filter(date > "2021-01-01 00:00:00") %>%
+  filter(date < "2022-01-01 00:00:00")
+moon_III_prop21 <- as.data.frame(table(moon_III_prop21$illumcat)) %>%
+  mutate(prop = Freq/nrow(moondates)) %>%
+  mutate(Var1 = as.numeric(as.character(Var1))) %>%
+  add_row(Var1 = 50, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 55, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 60, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 65, Freq = 0, prop = 0) %>%
+  arrange(Var1) %>%
+  mutate(Expected = prop*9)
+
+moon_III_prop22 <- moondates %>% 
+  filter(date > "2021-12-30 00:00:00")
+moon_III_prop22 <- as.data.frame(table(moon_III_prop22$illumcat)) %>%
+  mutate(prop = Freq/nrow(moondates)) %>%
+  mutate(Var1 = as.numeric(as.character(Var1))) %>%
+  arrange(Var1) %>%
+  mutate(Expected = prop*40)
+
+chick_III_prop17 <- chick %>% 
+  filter(DateTime < "2018-01-01 00:00:00")
+chick_III_prop17 <- as.data.frame(table(chick_III_prop17$illumcat)) %>%
+  mutate(prop = Freq/nrow(chick)) %>%
+  mutate(Var1 = as.numeric(as.character(Var1))) %>%
+  add_row(Var1 = 15, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 25, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 30, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 40, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 45, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 50, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 55, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 60, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 65, Freq = 0, prop = 0) %>%
+  arrange(Var1)
+
+chick_III_prop18 <- chick %>% 
+  filter(DateTime > "2018-01-01 00:00:00") %>%
+  filter(DateTime < "2019-01-01 00:00:00")
+chick_III_prop18 <- as.data.frame(table(chick_III_prop18$illumcat)) %>%
+  mutate(prop = Freq/nrow(chick)) %>%
+  mutate(Var1 = as.numeric(as.character(Var1))) %>%
+  add_row(Var1 = 15, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 25, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 30, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 35, Freq = 0, prop = 0) %>%  
+  add_row(Var1 = 40, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 45, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 50, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 55, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 60, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 65, Freq = 0, prop = 0) %>%
+  arrange(Var1)
+
+chick_III_prop21 <- chick %>% 
+  filter(DateTime > "2021-01-01 00:00:00") %>%
+  filter(DateTime < "2022-01-01 00:00:00")
+chick_III_prop21 <- as.data.frame(table(chick_III_prop21$illumcat)) %>%
+  mutate(prop = Freq/nrow(chick)) %>%
+  mutate(Var1 = as.numeric(as.character(Var1))) %>%
+  add_row(Var1 = 10, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 15, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 20, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 25, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 30, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 35, Freq = 0, prop = 0) %>%  
+  add_row(Var1 = 40, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 45, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 50, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 55, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 60, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 65, Freq = 0, prop = 0) %>%
+  arrange(Var1)
+
+chick_III_prop22 <- chick %>%
+  filter(DateTime > "2022-01-01 00:00:00")
+chick_III_prop22 <- as.data.frame(table(chick_III_prop22$illumcat)) %>%
+  mutate(prop = Freq/nrow(chick)) %>%
+  mutate(Var1 = as.numeric(as.character(Var1))) %>%
+  add_row(Var1 = 25, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 35, Freq = 0, prop = 0) %>%  
+  add_row(Var1 = 40, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 45, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 50, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 55, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 60, Freq = 0, prop = 0) %>%
+  add_row(Var1 = 65, Freq = 0, prop = 0) %>%
+  arrange(Var1)
+
+III_points17 <- ggplot() +
+  xlab("Moon Phase") +
+  ylab("Proportion of Chicks") +
+  ggtitle("2017") +
+  geom_point(data = moon_III_prop17, aes(x = Var1, y = prop), colour = "grey", size = 1) +
+  geom_point(data = chick_III_prop17, aes(x = Var1, y = prop), colour = "black", size = 1) +
+  geom_smooth(data = moon_III_prop17, aes(x = Var1, y = prop), colour = "grey", se = F) +
+  geom_smooth(data = chick_III_prop17, aes(x = Var1, y = prop), colour = "black", se = F) +
+  theme_classic()
+III_points17
+
+III_points18 <- ggplot() +
+  xlab("Moon Phase") +
+  ylab("Proportion of Chicks") +
+  ggtitle("2018") +
+  geom_point(data = moon_III_prop18, aes(x = Var1, y = prop), colour = "grey", size = 1) +
+  geom_point(data = chick_III_prop18, aes(x = Var1, y = prop), colour = "black", size = 1) +
+  geom_smooth(data = moon_III_prop18, aes(x = Var1, y = prop), colour = "grey", se = F) +
+  geom_smooth(data = chick_III_prop18, aes(x = Var1, y = prop), colour = "black", se = F) +
+  theme_classic()
+III_points18
+
+III_points21 <- ggplot() +
+  xlab("Moon Phase") +
+  ylab("Proportion of Chicks") +
+  ggtitle("2021") +
+  geom_point(data = moon_III_prop21, aes(x = Var1, y = prop), colour = "grey", size = 1) +
+  geom_point(data = chick_III_prop21, aes(x = Var1, y = prop), colour = "black", size = 1) +
+  geom_smooth(data = moon_III_prop21, aes(x = Var1, y = prop), colour = "grey", se = F) +
+  geom_smooth(data = chick_III_prop21, aes(x = Var1, y = prop), colour = "black", se = F) +
+  theme_classic()
+III_points21
+
+III_points22 <- ggplot() +
+  xlab("Moon Phase") +
+  ylab("Proportion of Chicks") +
+  ggtitle("2022") +
+  geom_point(data = moon_III_prop22, aes(x = Var1, y = prop), colour = "grey", size = 1) +
+  geom_point(data = chick_III_prop22, aes(x = Var1, y = prop), colour = "black", size = 1) +
+  geom_smooth(data = moon_III_prop22, aes(x = Var1, y = prop), colour = "grey", se = F) +
+  geom_smooth(data = chick_III_prop22, aes(x = Var1, y = prop), colour = "black", se = F) +
+  theme_classic()
+III_points22
+
+jpeg(filename = "figures/FigureS8_IMIIbyYear.jpeg", units = "cm", res = 300, width = 15, height = 12)
+III_points17 + III_points18 + III_points21 + III_points22
+dev.off()
+```
+
+#Old Code
 ```{r Resampling}
 z <- as.data.frame(t(replicate(10000, ks.test(sample(moondates$moonlightModel, size = 1000, replace = FALSE), chick$moonlightModel)))) %>%
   mutate(p.value = as.numeric(p.value)) %>%
